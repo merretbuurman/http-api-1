@@ -7,6 +7,13 @@ from restapi.flask_ext import BaseExtension, get_logger
 log = get_logger(__name__)
 
 '''
+This class provides a RabbitMQ connection 
+in order to write log messages into a queue.
+
+This is used in SeaDataCloud, where the log
+queues are then consumed by Logstash / ElasticSearch.
+
+Note:
 When adding a heartbeat interval, please make sure 
 that the value is higher than whichever long-running 
 task that happens in the same thread.
@@ -73,6 +80,7 @@ class RabbitWrapper(object):
         self.__connection = connection
         self.__channel = channel
         self.__dont_connect = dont_connect
+        # TODO: Declare queue and exchange, just in case?
 
     def connect(self):
         if self.__dont_connect:
