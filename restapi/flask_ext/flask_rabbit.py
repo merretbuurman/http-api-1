@@ -6,7 +6,18 @@ from restapi.flask_ext import BaseExtension, get_logger
 
 log = get_logger(__name__)
 
+'''
+When adding a heartbeat interval, please make sure 
+that the value is higher than whichever long-running 
+task that happens in the same thread.
 
+Heartbeats are not sent/received while a thread is
+blocked, so that results in error. More info:
+
+ * https://stackoverflow.com/questions/15015714/a-good-heartbeat-interval-for-pika-rabbitmq-in-amazon-ec2
+ * https://stackoverflow.com/questions/14572020/handling-long-running-tasks-in-pika-rabbitmq
+
+'''
 class RabbitExt(BaseExtension):
 
     def custom_connection(self, **kwargs):
@@ -48,7 +59,8 @@ class RabbitExt(BaseExtension):
                 host=variables.get('host'),
                 port=int(variables.get('port')),
                 virtual_host=variables.get('vhost'),
-                credentials=credentials
+                credentials=credentials,
+                heartbeat_interval=variables.get('heartbeat_interval')
             )
         )
         log.debug('Connecting to the Rabbit')
