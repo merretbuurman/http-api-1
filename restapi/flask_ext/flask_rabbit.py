@@ -51,6 +51,34 @@ class RabbitExt(BaseExtension):
         # return pika.BlockingConnection(parameter)
 
         # PIKA based
+        conn_wrapper = RabbitWrapper(variables)
+
+        # channel = connection.channel()
+        # # Declare exchange, queue, and binding
+        # channel.queue_declare(queue=QUEUE)
+        # channel.exchange_declare(exchange=EXCHANGE, exchange_type='topic')
+        # channel.queue_bind(
+        #     exchange=EXCHANGE, queue=QUEUE, routing_key=ROUTING_KEY)
+        return conn_wrapper
+
+    # def custom_init(self, pinit=False, pdestroy=False, **kwargs):
+    #     """ Note: we ignore args here """
+
+    #     # recover instance with the parent method
+    #     queue = super().custom_init()
+    #     print(queue)
+    #     return queue
+
+
+class RabbitWrapper(object):
+
+    def __init__(self, variables):
+        self.__variables = variables
+        self.__connection = connection
+        self.__channel = channel
+
+    def connect(self):
+        variables = self.__variables
         credentials = pika.PlainCredentials(
             variables.get('user'),
             variables.get('password')
@@ -64,19 +92,36 @@ class RabbitExt(BaseExtension):
                 heartbeat_interval=variables.get('heartbeat_interval')
             )
         )
+        self.__connection = connection
 
-        # channel = connection.channel()
-        # # Declare exchange, queue, and binding
-        # channel.queue_declare(queue=QUEUE)
-        # channel.exchange_declare(exchange=EXCHANGE, exchange_type='topic')
-        # channel.queue_bind(
-        #     exchange=EXCHANGE, queue=QUEUE, routing_key=ROUTING_KEY)
-        return connection
+    '''
+    Return existing channel (if healthy) or create and
+    return new one.
+    This is the method supposed to be used by any
+    outside client that wants to interact with RabbitMQ.
+    '''
+    def channel(self):
+        if self.__channel is None or self.__channel.is_closed or self.__channel.is_closing:
+            self.__channel = self._get_new_channel() 
+        return self.__channel
 
-    # def custom_init(self, pinit=False, pdestroy=False, **kwargs):
-    #     """ Note: we ignore args here """
+    '''
+    Create a new channel. If there is no connection,
+    it will try to connect.
+    '''
+    def _get_new_channel(self):
+        if self.__connection is None:
+            log.warning('Can not get new channel if connection is closed. Reconnecting.')
+            self.connect()
+        log.debug('Creating new channel.')
+        return self.__connection.channel()
 
-    #     # recover instance with the parent method
-    #     queue = super().custom_init()
-    #     print(queue)
-    #     return queue
+    '''
+    Cleanly close the connection.
+    '''
+    def close_connection(self):
+        # TODO: This must be called!
+        if self.__connection.is_closed or self.__connection.is_closing:
+            log.debug('Connection already closed or closing.')
+        else:
+            self.__connection.close()
