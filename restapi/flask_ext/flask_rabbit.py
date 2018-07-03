@@ -25,15 +25,12 @@ class RabbitExt(BaseExtension):
         #############################
         # NOTE: for SeaDataCloud
         # Unused for debugging at the moment
+        dont_connect = False
         from restapi.confs import PRODUCTION
         if not PRODUCTION:
-            log.warning("Skipping Rabbit")
+            log.warning("Skipping Rabbit, logging to normal log instead.")
+            dont_connect = True
             # TODO: Have a TEST setting for testbeds, with different queue?
-            # TODO: Log into some file if Rabbit not available?
-
-            class Empty:
-                pass
-            return Empty()
 
         #############################
         variables = self.variables
@@ -51,7 +48,7 @@ class RabbitExt(BaseExtension):
         # return pika.BlockingConnection(parameter)
 
         # PIKA based
-        conn_wrapper = RabbitWrapper(variables)
+        conn_wrapper = RabbitWrapper(variables, dont_connect)
 
         # channel = connection.channel()
         # # Declare exchange, queue, and binding
@@ -69,15 +66,17 @@ class RabbitExt(BaseExtension):
     #     print(queue)
     #     return queue
 
-
 class RabbitWrapper(object):
 
-    def __init__(self, variables):
+    def __init__(self, variables, dont_connect=False):
         self.__variables = variables
         self.__connection = connection
         self.__channel = channel
+        self.__dont_connect = dont_connect
 
     def connect(self):
+        if self.__dont_connect:
+            return
         variables = self.__variables
         credentials = pika.PlainCredentials(
             variables.get('user'),
@@ -96,13 +95,18 @@ class RabbitWrapper(object):
         self.__connection = connection
 
     def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
+        body = json.dumps(dictionary_message)
+
+        if self.__dont_connect:
+            log.info('RABBIT LOG MESSAGE (%s, %s, %s): %s' % (app_name, exchange, queue, body))
+            return
+
         filter_code = 'de.dkrz.seadata.filter_code.json'
         permanent_delivery=2
         props = pika.BasicProperties(
             delivery_mode=permanent_delivery,
             headers={'app_name': app_name, 'filter_code': filter_code},
         )
-        body = json.dumps(dictionary_message)
 
         max_publish = 3
         for i in xrange(max_publish):
@@ -131,6 +135,8 @@ class RabbitWrapper(object):
     outside client that wants to interact with RabbitMQ.
     '''
     def channel(self):
+        if self.__dont_connect:
+            return None
         if self.__channel is None or self.__channel.is_closed or self.__channel.is_closing:
             self.__channel = self._get_new_channel() 
         return self.__channel
@@ -140,6 +146,8 @@ class RabbitWrapper(object):
     it will try to connect.
     '''
     def _get_new_channel(self):
+        if self.__dont_connect:
+            return None
         if self.__connection is None:
             log.warning('Can not get new channel if connection is closed. Reconnecting.')
             self.connect()
@@ -151,6 +159,8 @@ class RabbitWrapper(object):
     '''
     def close_connection(self):
         # TODO: This must be called!
+        if self.__dont_connect:
+            return
         if self.__connection.is_closed or self.__connection.is_closing:
             log.debug('Connection already closed or closing.')
         else:
