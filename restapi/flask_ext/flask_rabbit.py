@@ -28,6 +28,8 @@ class RabbitExt(BaseExtension):
         from restapi.confs import PRODUCTION
         if not PRODUCTION:
             log.warning("Skipping Rabbit")
+            # TODO: Have a TEST setting for testbeds, with different queue?
+            # TODO: Log into some file if Rabbit not available?
 
             class Empty:
                 pass
