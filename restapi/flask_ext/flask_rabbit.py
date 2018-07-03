@@ -96,6 +96,35 @@ class RabbitWrapper(object):
         log.debug('Connecting to the Rabbit')
         self.__connection = connection
 
+    def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
+        filter_code = 'de.dkrz.seadata.filter_code.json'
+        permanent_delivery=2
+        props = pika.BasicProperties(
+            delivery_mode=permanent_delivery,
+            headers={'app_name': app_name, 'filter_code': filter_code},
+        )
+        body = json.dumps(dictionary_message)
+
+        max_publish = 3
+        for i in xrange(max_publish):
+            try:
+                channel = self.channel()
+                channel.basic_publish(
+                    exchange=exchange,
+                    routing_key=queue,
+                    properties=props,
+                    body=body,
+                )
+                log.verbose('Succeeded to send message to RabbitMQ in try (%s/%s)' % ((i+1), max_publish))
+                break
+            except pika.exceptions.ConnectionClosed:
+               log.verbose('Failed to send log message in try (%s/%s), because connection is dead.' % ((i+1), max_publish))
+                self.connect()
+            except pika.exceptions.ChannelClosed:
+               log.verbose('Failed to send log message in try (%s/%s), because channel is dead.' % ((i+1), max_publish))
+                self.channel()
+
+
     '''
     Return existing channel (if healthy) or create and
     return new one.
