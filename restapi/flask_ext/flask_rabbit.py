@@ -82,6 +82,13 @@ class RabbitWrapper(object):
         self.__dont_connect = dont_connect
         # TODO: Declare queue and exchange, just in case?
 
+        # Initial connection:
+        self.connect()
+
+    '''
+    Connect to RabbitMQ, unless the dont-connect parameter
+    is set.
+    '''
     def connect(self):
         if self.__dont_connect:
             return
@@ -108,6 +115,12 @@ class RabbitWrapper(object):
             self.__dont_connect = True
             self.__connection = None
 
+    '''
+    Send a log message to the RabbitMQ queue, unless
+    the dont-connect parameter is set. In that case,
+    the messages get logged into the normal log files.
+    If the connection is dead, reconnection is attempted.
+    '''
     def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
         body = json.dumps(dictionary_message)
 
