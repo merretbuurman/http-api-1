@@ -80,6 +80,7 @@ class RabbitWrapper(object):
         self.__connection = connection
         self.__channel = channel
         self.__dont_connect = dont_connect
+        self.__couldnt_connect = 0
         # TODO: Declare queue and exchange, just in case?
 
         # Initial connection:
@@ -109,10 +110,11 @@ class RabbitWrapper(object):
             )
             log.debug('Connecting to the Rabbit')
             self.__connection = connection
+            self.__couldnt_connect = 0
 
         except pika.exceptions.ConnectionClosed as e:
-            log.warn('Could not connect to RabbitMQ. Log messages will be written into file instead.')
-            self.__dont_connect = True
+            log.warn('Could not connect to RabbitMQ. Connection will be attempted a few times when messages are sent.')
+            self.__couldnt_connect = self.__couldnt_connect+1
             self.__connection = None
 
     '''
@@ -124,7 +126,8 @@ class RabbitWrapper(object):
     def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
         body = json.dumps(dictionary_message)
 
-        if self.__dont_connect:
+        max_reconnect = 3
+        if self.__dont_connect or self.__couldnt_connect > max_reconnect:
             log.info('RABBIT LOG MESSAGE (%s, %s, %s): %s' % (app_name, exchange, queue, body))
             return
 
