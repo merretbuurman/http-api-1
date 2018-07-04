@@ -90,17 +90,23 @@ class RabbitWrapper(object):
             variables.get('user'),
             variables.get('password')
         )
-        connection = pika.BlockingConnection(
-            pika.ConnectionParameters(
-                host=variables.get('host'),
-                port=int(variables.get('port')),
-                virtual_host=variables.get('vhost'),
-                credentials=credentials,
-                heartbeat_interval=variables.get('heartbeat_interval')
+        try:
+            connection = pika.BlockingConnection(
+                pika.ConnectionParameters(
+                    host=variables.get('host'),
+                    port=int(variables.get('port')),
+                    virtual_host=variables.get('vhost'),
+                    credentials=credentials,
+                    heartbeat_interval=variables.get('heartbeat_interval')
+                )
             )
-        )
-        log.debug('Connecting to the Rabbit')
-        self.__connection = connection
+            log.debug('Connecting to the Rabbit')
+            self.__connection = connection
+
+        except pika.exceptions.ConnectionClosed as e:
+            log.warn('Could not connect to RabbitMQ. Log messages will be written into file instead.')
+            self.__dont_connect = True
+            self.__connection = None
 
     def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
         body = json.dumps(dictionary_message)
