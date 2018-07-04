@@ -1,10 +1,29 @@
 # -*- coding: utf-8 -*-
 
 import pika
+import signal
 from restapi.flask_ext import BaseExtension, get_logger
 # from utilities.logs import re_obscure_pattern
 
 log = get_logger(__name__)
+
+RABBIT = None # Store RabbitWrapper instance here for graceful shutdown
+
+def sigint_handler(signum=None, frame=None):
+    log.debug('Caught signal (%s), will close connection and exit.' % signum)
+    if RABBIT is not None:
+        RABBIT.close_connection()
+    LOGGER.info('Connection closed.')
+
+'''
+Close connection gracefully on SIGTERM, as
+the docker-stop command issues a SIGTERM
+signal.
+https://www.ctl.io/developers/blog/post/gracefully-stopping-docker-containers/
+'''
+signal.signal(signal.SIGTERM , sigint_handler)
+signal.signal(signal.SIGINT, sigint_handler)
+
 
 '''
 This class provides a RabbitMQ connection 
@@ -56,6 +75,7 @@ class RabbitExt(BaseExtension):
 
         # PIKA based
         conn_wrapper = RabbitWrapper(variables, dont_connect)
+        RABBIT = conn_wrapper # TODO test shi
 
         # channel = connection.channel()
         # # Declare exchange, queue, and binding
