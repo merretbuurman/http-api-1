@@ -97,8 +97,8 @@ class RabbitWrapper(object):
 
     def __init__(self, variables, dont_connect=False):
         self.__variables = variables
-        self.__connection = connection
-        self.__channel = channel
+        self.__connection = None
+        self.__channel = None
         self.__dont_connect = dont_connect
         self.__couldnt_connect = 0
         # TODO: Declare queue and exchange, just in case?
@@ -171,10 +171,10 @@ class RabbitWrapper(object):
                 log.verbose('Succeeded to send message to RabbitMQ in try (%s/%s)' % ((i+1), max_publish))
                 break
             except pika.exceptions.ConnectionClosed:
-               log.verbose('Failed to send log message in try (%s/%s), because connection is dead.' % ((i+1), max_publish))
+                log.verbose('Failed to send log message in try (%s/%s), because connection is dead.' % ((i+1), max_publish))
                 self.connect()
             except pika.exceptions.ChannelClosed:
-               log.verbose('Failed to send log message in try (%s/%s), because channel is dead.' % ((i+1), max_publish))
+                log.verbose('Failed to send log message in try (%s/%s), because channel is dead.' % ((i+1), max_publish))
                 self.channel()
 
 
