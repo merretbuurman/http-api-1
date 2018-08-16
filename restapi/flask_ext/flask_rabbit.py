@@ -1,49 +1,12 @@
 # -*- coding: utf-8 -*-
 
 import pika
-import signal
 from restapi.flask_ext import BaseExtension, get_logger
 # from utilities.logs import re_obscure_pattern
 
 log = get_logger(__name__)
 
-RABBIT = None # Store RabbitWrapper instance here for graceful shutdown
 
-def sigint_handler(signum=None, frame=None):
-    log.debug('Caught signal (%s), will close connection and exit.' % signum)
-    if RABBIT is not None:
-        RABBIT.close_connection()
-    LOGGER.info('Connection closed.')
-
-'''
-Close connection gracefully on SIGTERM, as
-the docker-stop command issues a SIGTERM
-signal.
-https://www.ctl.io/developers/blog/post/gracefully-stopping-docker-containers/
-'''
-signal.signal(signal.SIGTERM , sigint_handler)
-signal.signal(signal.SIGINT, sigint_handler)
-
-
-'''
-This class provides a RabbitMQ connection 
-in order to write log messages into a queue.
-
-This is used in SeaDataCloud, where the log
-queues are then consumed by Logstash / ElasticSearch.
-
-Note:
-When adding a heartbeat interval, please make sure 
-that the value is higher than whichever long-running 
-task that happens in the same thread.
-
-Heartbeats are not sent/received while a thread is
-blocked, so that results in error. More info:
-
- * https://stackoverflow.com/questions/15015714/a-good-heartbeat-interval-for-pika-rabbitmq-in-amazon-ec2
- * https://stackoverflow.com/questions/14572020/handling-long-running-tasks-in-pika-rabbitmq
-
-'''
 class RabbitExt(BaseExtension):
 
     def custom_connection(self, **kwargs):
@@ -51,12 +14,14 @@ class RabbitExt(BaseExtension):
         #############################
         # NOTE: for SeaDataCloud
         # Unused for debugging at the moment
-        dont_connect = False
-        from restapi.confs import PRODUCTION
-        if not PRODUCTION:
-            log.warning("Skipping Rabbit, logging to normal log instead.")
-            dont_connect = True
-            # TODO: Have a TEST setting for testbeds, with different queue?
+        # from restapi.confs import PRODUCTION
+        # if not PRODUCTION:
+        if True:
+            log.warning("Skipping Rabbit")
+
+            class Empty:
+                pass
+            return Empty()
 
         #############################
         variables = self.variables
@@ -74,8 +39,19 @@ class RabbitExt(BaseExtension):
         # return pika.BlockingConnection(parameter)
 
         # PIKA based
-        conn_wrapper = RabbitWrapper(variables, dont_connect)
-        RABBIT = conn_wrapper # TODO test shi
+        credentials = pika.PlainCredentials(
+            variables.get('user'),
+            variables.get('password')
+        )
+        connection = pika.BlockingConnection(
+            pika.ConnectionParameters(
+                host=variables.get('host'),
+                port=int(variables.get('port')),
+                virtual_host=variables.get('vhost'),
+                credentials=credentials
+            )
+        )
+        log.debug('Connecting to the Rabbit')
 
         # channel = connection.channel()
         # # Declare exchange, queue, and binding
@@ -83,7 +59,7 @@ class RabbitExt(BaseExtension):
         # channel.exchange_declare(exchange=EXCHANGE, exchange_type='topic')
         # channel.queue_bind(
         #     exchange=EXCHANGE, queue=QUEUE, routing_key=ROUTING_KEY)
-        return conn_wrapper
+        return connection
 
     # def custom_init(self, pinit=False, pdestroy=False, **kwargs):
     #     """ Note: we ignore args here """
@@ -92,6 +68,8 @@ class RabbitExt(BaseExtension):
     #     queue = super().custom_init()
     #     print(queue)
     #     return queue
+<<<<<<< Updated upstream
+=======
 
 class RabbitWrapper(object):
 
@@ -119,6 +97,7 @@ class RabbitWrapper(object):
             variables.get('password')
         )
         try:
+            log.info('Connecting to the Rabbit')
             connection = pika.BlockingConnection(
                 pika.ConnectionParameters(
                     host=variables.get('host'),
@@ -128,14 +107,33 @@ class RabbitWrapper(object):
                     heartbeat_interval=variables.get('heartbeat_interval')
                 )
             )
-            log.debug('Connecting to the Rabbit')
             self.__connection = connection
             self.__couldnt_connect = 0
 
-        except pika.exceptions.ConnectionClosed as e:
+        except pika.exceptions.ConnectionClosed as e1:
+            log.error(str(type(e1)))
             log.warn('Could not connect to RabbitMQ. Connection will be attempted a few times when messages are sent.')
             self.__couldnt_connect = self.__couldnt_connect+1
             self.__connection = None
+
+        except pika.exceptions.ProbableAuthenticationError as e2:
+            log.error(str(type(e2)))
+            log.warn('Could not connect to RabbitMQ. Connection will be attempted a few times when messages are sent.')
+            self.__couldnt_connect = self.__couldnt_connect+1
+            self.__connection = None
+
+        except pika.exceptions.AMQPConnectionError as e3:
+            log.error(str(type(e3)))
+            log.warn('Could not connect to RabbitMQ. Connection will be attempted a few times when messages are sent.')
+            self.__couldnt_connect = self.__couldnt_connect+1
+            self.__connection = None
+
+        except Exception as e4:
+            log.error(str(type(e4)))
+            if getattr(e4, '__module__', None) == pika.__name__:
+                log.warn('Could not connect to RabbitMQ. Connection will be attempted a few times when messages are sent.')
+                self.__couldnt_connect = self.__couldnt_connect+1
+                self.__connection = None
 
     '''
     Send a log message to the RabbitMQ queue, unless
@@ -143,12 +141,12 @@ class RabbitWrapper(object):
     the messages get logged into the normal log files.
     If the connection is dead, reconnection is attempted.
     '''
-    def log_json_to_queue(self, dictionary_message, app_name, exchange, queue):
+    def log_json_to_queue(self, dictionary_message, app_name, exchange, routing_key):
         body = json.dumps(dictionary_message)
 
         max_reconnect = 3
         if self.__dont_connect or self.__couldnt_connect > max_reconnect:
-            log.info('RABBIT LOG MESSAGE (%s, %s, %s): %s' % (app_name, exchange, queue, body))
+            log.info('RABBIT LOG MESSAGE (%s, %s, %s): %s' % (app_name, exchange, routing_key, body))
             return
 
         filter_code = 'de.dkrz.seadata.filter_code.json'
@@ -164,7 +162,7 @@ class RabbitWrapper(object):
                 channel = self.channel()
                 channel.basic_publish(
                     exchange=exchange,
-                    routing_key=queue,
+                    routing_key=routing_key,
                     properties=props,
                     body=body,
                 )
@@ -201,7 +199,7 @@ class RabbitWrapper(object):
         if self.__connection is None:
             log.warning('Can not get new channel if connection is closed. Reconnecting.')
             self.connect()
-        log.debug('Creating new channel.')
+        log.info('Creating new channel.')
         return self.__connection.channel()
 
     '''
@@ -215,3 +213,4 @@ class RabbitWrapper(object):
             log.debug('Connection already closed or closing.')
         else:
             self.__connection.close()
+>>>>>>> Stashed changes
