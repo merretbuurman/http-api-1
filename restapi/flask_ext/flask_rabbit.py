@@ -7,6 +7,15 @@ from restapi.flask_ext import BaseExtension, get_logger
 
 log = get_logger(__name__)
 
+# TODO To be tested: With working RabbitMQ: Does everything
+#       work as intended?
+# TODO To be tested: Reconnection mechanism (e.g. wrong password),
+#      does it try to reconnect several times, then give up?
+# TODO To be tested: dont_connect setting, does it log to file
+#      directly?
+# TODO To be added: Heartbeat mechanism
+# TODO To be added: Close connection - sigint, sigkill
+
 
 '''
 This class provides a (wrapper for a) RabbitMQ connection 
